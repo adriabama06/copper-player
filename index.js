@@ -89,7 +89,7 @@ bot.once("spawn", async () => {
             await sleep(5000);
         }
 
-        const source = await openUsefulDropChest(bot, DROP_CHESTS, (item) => !skip_items.includes(item.name) && store_chests.has(item.name));
+        const source = await openUsefulDropChest(bot, DROP_CHESTS, (item) => !skip_items.includes(item.name) && STORE_CHESTS.has(item.name));
 
         if (!source) {
             console.log("No items found to work, sleeping");
