@@ -32,12 +32,12 @@ export function isInside(min, max, pos) {
 
 /**
  * @returns {prismarine_block.Block | null}
+ * @param {mineflayer.Bot} bot
  * @param {Vec3} min 
  * @param {Vec3} max 
- * @param {mineflayer.Bot} bot
  * @param {(block: prismarine_block.Block) => boolean} fn
  */
-export function findBlock(min, max, bot, fn) {
+export function findBlock(bot, min, max, fn) {
     for (let x = min.x; x <= max.x; x++) {
         for (let y = min.y; y <= max.y; y++) {
             for (let z = min.z; z <= max.z; z++) {
@@ -51,6 +51,31 @@ export function findBlock(min, max, bot, fn) {
     }
 
     return null;
+}
+
+/**
+ * @returns {prismarine_block.Block[]}
+ * @param {mineflayer.Bot} bot
+ * @param {Vec3} min 
+ * @param {Vec3} max 
+ * @param {(block: prismarine_block.Block) => boolean} fn
+ */
+export function findBlocks(bot, min, max, fn) {
+    const blocks = [];
+
+    for (let x = min.x; x <= max.x; x++) {
+        for (let y = min.y; y <= max.y; y++) {
+            for (let z = min.z; z <= max.z; z++) {
+                const block = bot.blockAt(new Vec3(x, y, z));
+
+                if(!block) continue;
+
+                if(fn(block)) blocks.push(block);
+            }
+        }
+    }
+
+    return blocks;
 }
 
 const pos1 = parseCoord(process.env.WORK_AREA.split("|")[0]);
