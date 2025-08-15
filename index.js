@@ -9,7 +9,7 @@ const goals = mineflayer_pathfinder.goals;
 import sleep from "./sleep.js";;
 
 import { findBlock, MAX_POS, MIN_POS } from "./area.js";
-import { findChests, openStoreChest, openUsefulDropChest } from "./chests.js";
+import { findChests, MAX_RANGE_CHEST, openStoreChest, openUsefulDropChest } from "./chests.js";
 
 const bot = mineflayer.createBot({
     host: process.env.SERVER_IP,
@@ -34,6 +34,8 @@ defaultMove.scafoldingBlocks = []; // Disable place blocks
 bot.once("spawn", async () => {
     await bot.waitForChunksToLoad();
 
+    await sleep(3000);
+
     bot.pathfinder.setMovements(defaultMove);
 
     const BED = findBlock(bot, MIN_POS, MAX_POS, (block) => block.name.includes("_bed"));
@@ -57,11 +59,29 @@ bot.once("spawn", async () => {
 
     console.log("Pressure plate found at: " + PRESSURE_PLATE.position);
 
-    await bot.pathfinder.goto(new goals.GoalNear(BED.position.x, BED.position.y, BED.position.z, 1));
+    await bot.pathfinder.goto(new goals.GoalNear(BED.position.x, BED.position.y, BED.position.z, MAX_RANGE_CHEST / 2));
 
     await bot.lookAt(BED.position);
 
     await bot.activateBlock(BED);
+
+    await sleep(3000);
+
+    if (bot.isSleeping) {
+        await bot.wake();
+
+        await sleep(3000);
+
+        await bot.lookAt(BED.position);
+
+        try {
+            await bot.sleep(BED);
+
+            await sleep(3000);
+
+            while (bot.isSleeping) { await sleep(100); }
+        } catch { }
+    }
 
     bot.on("chat", async (username, message) => {
         if (message === "kill") {
@@ -85,16 +105,49 @@ bot.once("spawn", async () => {
             await new Promise((resolve) => {
                 bot.once("respawn", () => resolve());
             });
-            
-            await sleep(5000);
+
+            await sleep(10 * 1000);
+        }
+
+        // Clear inventory before start
+        {
+            const player_items = bot.inventory.items();
+
+            if (player_items.length > 0) {
+                const target = await openStoreChest(bot, DROP_CHESTS);
+
+                if (target) {
+                    for (let i = 0; i < player_items.length && (bot.inventory.items().length - i) > 0 && target.container.containerItems().length < eval(target.container.type.split("_")[1].replace("x", "*")); i++) {
+                        const slot = player_items[i];
+
+                        await target.container.deposit(slot.type, null, slot.count);
+
+                        await sleep(100);
+                    }
+
+                    target.container.close();
+                }
+            }
         }
 
         const source = await openUsefulDropChest(bot, DROP_CHESTS, (item) => !skip_items.includes(item.name) && STORE_CHESTS.has(item.name));
 
         if (!source) {
-            console.log("No items found to work, sleeping");
+            console.log("No items found to work, sleeping if I can.");
 
-            await sleep(5000);
+            await bot.pathfinder.goto(new goals.GoalNear(BED.position.x, BED.position.y, BED.position.z, MAX_RANGE_CHEST / 2));
+
+            await bot.lookAt(BED.position);
+
+            try {
+                await bot.sleep(BED);
+
+                await sleep(3000);
+
+                while (bot.isSleeping) { await sleep(100); }
+            } catch { }
+
+            await sleep(10 * 1000);
 
             continue;
         }
@@ -103,6 +156,8 @@ bot.once("spawn", async () => {
         // The bot.inventory is not updated till container.close() is executed, so use i to count the added items
         for (let i = 0; i < source.target_items.length && (bot.inventory.items().length + i) < (4 * 9); i++) {
             const slot = source.target_items[i];
+
+            if(slot.type !== source.target_items[0].type) continue;
 
             await source.container.withdraw(slot.type, null, slot.count);
 
@@ -118,7 +173,7 @@ bot.once("spawn", async () => {
             if (!target) {
                 skip_items.push(source.target_items[0].name);
 
-                await bot.pathfinder.goto(new goals.GoalNear(source.chest_used.position.x, source.chest_used.position.y, source.chest_used.position.z, 4));
+                await bot.pathfinder.goto(new goals.GoalNear(source.chest_used.position.x, source.chest_used.position.y, source.chest_used.position.z, MAX_RANGE_CHEST));
                 await bot.lookAt(source.chest_used.position);
 
                 const container = await bot.openContainer(source.chest_used);
@@ -126,7 +181,9 @@ bot.once("spawn", async () => {
                 for (let i = 0; i < source.target_items.length && (bot.inventory.items().length - i) > 0; i++) {
                     const slot = source.target_items[i];
 
-                    await source.container.deposit(slot.type, null, slot.count);
+                    if(slot.type !== source.target_items[0].type) continue;
+
+                    await container.deposit(slot.type, null, slot.count);
 
                     await sleep(100);
                 }
@@ -138,6 +195,8 @@ bot.once("spawn", async () => {
 
             for (let i = 0; i < source.target_items.length && (bot.inventory.items().length - i) > 0 && target.container.containerItems().length < eval(target.container.type.split("_")[1].replace("x", "*")); i++) {
                 const slot = source.target_items[i];
+
+                if(slot.type !== source.target_items[0].type) continue;
 
                 await target.container.deposit(slot.type, null, slot.count);
 

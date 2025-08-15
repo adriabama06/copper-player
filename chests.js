@@ -13,6 +13,8 @@ import sleep from "./sleep.js";
 
 import { findBlocks, isInside } from "./area.js";
 
+export const MAX_RANGE_CHEST = 4;
+
 /**
  * @returns {prismarine_block.Block}
  * @param {prismarine_entity.Entity} itemframe 
@@ -113,14 +115,9 @@ export function findChests(bot, min, max) {
     for(const itemframe of itemframes) {
         const itemName = minecraft_data(process.env.VERSION).items[itemframe.metadata.itemId].name;
 
-        if(store_chests.has(itemName)) {
-            const chests = store_chests.get(itemName);
+        if(!store_chests.has(itemName)) store_chests.set(itemName, []);
 
-            store_chests.set([...chests, findNearestChest(itemframe.entity, chests)]);
-            continue;
-        }
-
-        store_chests.set(itemName, [findNearestChest(itemframe.entity, chests)]);
+        store_chests.set(itemName, [...store_chests.get(itemName), findNearestChest(itemframe.entity, chests)]);
     }
 
     return [ drop_chests, store_chests ];
@@ -132,7 +129,7 @@ export function findChests(bot, min, max) {
  */
 export async function openDropChest(bot, drop_chests) {
     for(const drop_chest of drop_chests) {
-        await bot.pathfinder.goto(new goals.GoalNear(drop_chest.position.x, drop_chest.position.y, drop_chest.position.z, 4));
+        await bot.pathfinder.goto(new goals.GoalNear(drop_chest.position.x, drop_chest.position.y, drop_chest.position.z, MAX_RANGE_CHEST));
         await bot.lookAt(drop_chest.position);
 
         const container = await bot.openContainer(drop_chest);
@@ -158,7 +155,7 @@ export async function openDropChest(bot, drop_chests) {
  */
 export async function openUsefulDropChest(bot, drop_chests, fn) {
     for(const drop_chest of drop_chests) {
-        await bot.pathfinder.goto(new goals.GoalNear(drop_chest.position.x, drop_chest.position.y, drop_chest.position.z, 4));
+        await bot.pathfinder.goto(new goals.GoalNear(drop_chest.position.x, drop_chest.position.y, drop_chest.position.z, MAX_RANGE_CHEST));
         await bot.lookAt(drop_chest.position);
 
         const container = await bot.openContainer(drop_chest);
@@ -192,7 +189,7 @@ export async function openUsefulDropChest(bot, drop_chests, fn) {
  */
 export async function openStoreChest(bot, chests) {
     for(const chest of chests) {
-        await bot.pathfinder.goto(new goals.GoalNear(chest.position.x, chest.position.y, chest.position.z, 4));
+        await bot.pathfinder.goto(new goals.GoalNear(chest.position.x, chest.position.y, chest.position.z, MAX_RANGE_CHEST));
         await bot.lookAt(chest.position);
 
         const container = await bot.openContainer(chest);
