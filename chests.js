@@ -2,6 +2,7 @@ import mineflayer from "mineflayer";
 import prismarine_block from "prismarine-block";
 import prismarine_entity from "prismarine-entity";
 import prismarine_item from "prismarine-item";
+const { Item: PrismarineItem } = prismarine_item;
 import minecraft_data from "minecraft-data";
 import { Vec3 } from "vec3";
 
@@ -16,6 +17,13 @@ import { findBlocks, isInside } from "./area.js";
 export const MAX_RANGE_CHEST = 4;
 
 /**
+ * @param {mineflayer.Chest} chest 
+ */
+export function getOnlyChestSlots(chest) {
+    return chest.slots.filter((item, i) => i < chest.inventoryStart);
+}
+
+/**
  * @returns {prismarine_block.Block}
  * @param {prismarine_entity.Entity} itemframe 
  * @param {prismarine_block.Block[]} chests 
@@ -27,7 +35,7 @@ function findNearestChest(itemframe, chests) {
     const delta_y = position.y - itemframe.position.y;
 
     // If the diference in X is less than Y it means that the itemframe is touching the chest in the cord X, otherwise is Y
-    if(Math.abs(delta_x) < Math.abs(delta_y)) {
+    if (Math.abs(delta_x) < Math.abs(delta_y)) {
         // Check if the increment is negative or positive to determinate if the position must be in the negative or positive
         position.x += delta_x > 0 ? 1 : -1;
     }
@@ -36,12 +44,12 @@ function findNearestChest(itemframe, chests) {
     }
 
     // If is the chest in the estimated positon perfect, if not, search
-    if(chests.find(c => c.position.x === position.x && c.position.y === position.y && c.position.z === position.z)) {
+    if (chests.find(c => c.position.x === position.x && c.position.y === position.y && c.position.z === position.z)) {
         return chests.find(c => c.position.x === position.x && c.position.y === position.y && c.position.z === position.z);
     }
 
     position = new Vec3(itemframe.position.x - 0.1, itemframe.position.y - 0.1, itemframe.position.z - 0.1).round();
-    
+
     let best_chest = chests[0];
     let best_distance = itemframe.position.distanceTo(best_chest.position);
 
@@ -49,13 +57,30 @@ function findNearestChest(itemframe, chests) {
         const chest = chests[i];
         const distance = itemframe.position.distanceTo(chest.position);
 
-        if(distance > best_distance) continue;
+        if (distance > best_distance) continue;
 
         best_chest = chest;
         best_distance = distance;
     }
 
     return best_chest;
+}
+
+/**
+ * @returns {prismarine_block.Block | null}
+ * @param {mineflayer.Bot} bot
+ * @param {prismarine_block.Block} chest 
+ */
+export function findFloorBlock(bot, chest) {
+    for (let i = 1; (chest.position.y - i) > -64; i++) {
+        const block = bot.blockAt(new Vec3(chest.position.x, chest.position.y - i, chest.position.z));
+
+        if (!block.name.includes("chest") && !block.name.includes("air")) {
+            return block;
+        }
+    }
+
+    return null;
 }
 
 /**
@@ -69,16 +94,16 @@ function findItemFrames(bot, min, max) {
 
     const itemframes = [];
 
-    for(const entity_id in entities) {
+    for (const entity_id in entities) {
         const entity = entities[entity_id];
 
-        if(!isInside(min, max, entity.position) || !entity.name || entity.name !== "item_frame") continue;
+        if (!isInside(min, max, entity.position) || !entity.name || entity.name !== "item_frame") continue;
 
-        if(entity.metadata.length === 0) continue;
+        if (entity.metadata.length === 0) continue;
 
         const metadata = entity.metadata.find((data) => data && data.itemId);
 
-        if(!metadata) continue;
+        if (!metadata) continue;
 
         itemframes.push({ entity, metadata });
     }
@@ -95,12 +120,12 @@ function findItemFrames(bot, min, max) {
 export function findChests(bot, min, max) {
     const drop_chests = findBlocks(bot, min, max,
         (block) => block.name === "trapped_chest" && block._properties && typeof block._properties.type === "string"
-                   && (block._properties.type === "single" || block._properties.type === "right")
+            && (block._properties.type === "single" || block._properties.type === "right")
     );
 
     const chests = findBlocks(bot, min, max, (block) => block.name === "chest");
 
-    if(drop_chests.length === 0 || chests.length === 0) {
+    if (drop_chests.length === 0 || chests.length === 0) {
         console.log("There are no chests");
         process.exit(0);
     }
@@ -112,15 +137,15 @@ export function findChests(bot, min, max) {
      */
     const store_chests = new Map();
 
-    for(const itemframe of itemframes) {
+    for (const itemframe of itemframes) {
         const itemName = minecraft_data(process.env.VERSION).items[itemframe.metadata.itemId].name;
 
-        if(!store_chests.has(itemName)) store_chests.set(itemName, []);
+        if (!store_chests.has(itemName)) store_chests.set(itemName, []);
 
         store_chests.set(itemName, [...store_chests.get(itemName), findNearestChest(itemframe.entity, chests)]);
     }
 
-    return [ drop_chests, store_chests ];
+    return [drop_chests, store_chests];
 }
 
 /**
@@ -128,15 +153,29 @@ export function findChests(bot, min, max) {
  * @param {prismarine_block.Block[]} drop_chests
  */
 export async function openDropChest(bot, drop_chests) {
-    for(const drop_chest of drop_chests) {
-        await bot.pathfinder.goto(new goals.GoalNear(drop_chest.position.x, drop_chest.position.y, drop_chest.position.z, MAX_RANGE_CHEST));
+    for (const drop_chest of drop_chests) {
+        const floor_chest = findFloorBlock(bot, drop_chest);
+
+        if (floor_chest !== null && Math.abs(floor_chest.position.y - bot.entity.position.y) > 1.5) {
+            try {
+                await bot.pathfinder.goto(new goals.GoalNear(floor_chest.position.x, floor_chest.position.y, floor_chest.position.z, 1.5));
+            } catch { }
+        }
+
+        try {
+            await bot.pathfinder.goto(new goals.GoalNear(drop_chest.position.x, drop_chest.position.y, drop_chest.position.z, MAX_RANGE_CHEST));
+        } catch {
+            console.log(`I can't reach the chest: (${drop_chest.position.x}, ${drop_chest.position.y}, ${drop_chest.position.z})`)
+            continue;
+        }
+        
         await bot.lookAt(drop_chest.position);
 
         const container = await bot.openContainer(drop_chest);
 
         sleep(100);
-        
-        if(container.containerItems().length === 0) {
+
+        if (container.containerItems().length === 0) {
             container.close();
             continue;
         }
@@ -151,25 +190,39 @@ export async function openDropChest(bot, drop_chests) {
 /**
  * @param {mineflayer.Bot} bot
  * @param {prismarine_block.Block[]} drop_chests
- * @param {(item: prismarine_item.Item) => boolean} fn
+ * @param {(item: PrismarineItem) => boolean} fn
  */
 export async function openUsefulDropChest(bot, drop_chests, fn) {
-    for(const drop_chest of drop_chests) {
-        await bot.pathfinder.goto(new goals.GoalNear(drop_chest.position.x, drop_chest.position.y, drop_chest.position.z, MAX_RANGE_CHEST));
+    for (const drop_chest of drop_chests) {
+        const floor_chest = findFloorBlock(bot, drop_chest);
+
+        if (floor_chest !== null && Math.abs(floor_chest.position.y - bot.entity.position.y) > 1.5) {
+            try {
+                await bot.pathfinder.goto(new goals.GoalNear(floor_chest.position.x, floor_chest.position.y, floor_chest.position.z, 1.5));
+            } catch { }
+        }
+
+        try {
+            await bot.pathfinder.goto(new goals.GoalNear(drop_chest.position.x, drop_chest.position.y, drop_chest.position.z, MAX_RANGE_CHEST));
+        } catch {
+            console.log(`I can't reach the chest: (${drop_chest.position.x}, ${drop_chest.position.y}, ${drop_chest.position.z})`)
+            continue;
+        }
+
         await bot.lookAt(drop_chest.position);
 
         const container = await bot.openContainer(drop_chest);
 
         await sleep(500);
 
-        if(container.containerItems().length === 0) {
+        if (container.containerItems().length === 0) {
             container.close();
             continue;
         }
 
         const target_item = container.containerItems().find(fn);
 
-        if(!target_item) {
+        if (!target_item) {
             container.close();
             continue;
         }
@@ -186,10 +239,25 @@ export async function openUsefulDropChest(bot, drop_chests, fn) {
 /**
  * @param {mineflayer.Bot} bot
  * @param {prismarine_block.Block[]} chests
+ * @param {PrismarineItem} item
  */
-export async function openStoreChest(bot, chests) {
-    for(const chest of chests) {
-        await bot.pathfinder.goto(new goals.GoalNear(chest.position.x, chest.position.y, chest.position.z, MAX_RANGE_CHEST));
+export async function openStoreChest(bot, chests, item) {
+    for (const chest of chests) {
+        const floor_chest = findFloorBlock(bot, chest);
+
+        if (floor_chest !== null && Math.abs(floor_chest.position.y - bot.entity.position.y) > 1.5) {
+            try {
+                await bot.pathfinder.goto(new goals.GoalNear(floor_chest.position.x, floor_chest.position.y, floor_chest.position.z, 1.5));
+            } catch { }
+        }
+
+        try {
+            await bot.pathfinder.goto(new goals.GoalNear(chest.position.x, chest.position.y, chest.position.z, MAX_RANGE_CHEST));
+        } catch {
+            console.log(`I can't reach the chest: (${chest.position.x}, ${chest.position.y}, ${chest.position.z})`)
+            continue;
+        }
+
         await bot.lookAt(chest.position);
 
         const container = await bot.openContainer(chest);
@@ -198,8 +266,19 @@ export async function openStoreChest(bot, chests) {
 
         // The chest is full
         // NOTE: target.container.type is "minecraft:generic_NxN" --> container.type.split("_")[1] --> NxN --> Max chest size
-        if(container.containerItems().length >= eval(container.type.split("_")[1].replace("x","*"))) {
-            console.log("Container full", container.containerItems().length, eval(container.type.split("_")[1].replace("x","*")));
+        if (container.containerItems().length >= eval(container.type.split("_")[1].replace("x", "*"))) {
+            console.log("Max slots", container.containerItems().length, eval(container.type.split("_")[1].replace("x", "*")));
+
+            const container_items = container.containerItems();
+
+            let count = 0;
+
+            for(let i = 0; i < container_items.length; i++) {
+                const current_item = container_items[i];
+
+                count += current_item.count;
+            }
+
             container.close();
             continue;
         }

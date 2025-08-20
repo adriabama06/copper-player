@@ -9,7 +9,7 @@ const goals = mineflayer_pathfinder.goals;
 import sleep from "./sleep.js";;
 
 import { findBlock, MAX_POS, MIN_POS } from "./area.js";
-import { findChests, MAX_RANGE_CHEST, openStoreChest, openUsefulDropChest } from "./chests.js";
+import { findChests, findFloorBlock, getOnlyChestSlots, MAX_RANGE_CHEST, openStoreChest, openUsefulDropChest } from "./chests.js";
 
 const bot = mineflayer.createBot({
     host: process.env.SERVER_IP,
@@ -59,7 +59,7 @@ bot.once("spawn", async () => {
 
     console.log("Pressure plate found at: " + PRESSURE_PLATE.position);
 
-    await bot.pathfinder.goto(new goals.GoalNear(BED.position.x, BED.position.y, BED.position.z, MAX_RANGE_CHEST / 2));
+    await bot.pathfinder.goto(new goals.GoalNear(BED.position.x, BED.position.y, BED.position.z, 3));
 
     await bot.lookAt(BED.position);
 
@@ -135,7 +135,7 @@ bot.once("spawn", async () => {
         if (!source) {
             console.log("No items found to work, sleeping if I can.");
 
-            await bot.pathfinder.goto(new goals.GoalNear(BED.position.x, BED.position.y, BED.position.z, MAX_RANGE_CHEST / 2));
+            await bot.pathfinder.goto(new goals.GoalNear(BED.position.x, BED.position.y, BED.position.z, 3));
 
             await bot.lookAt(BED.position);
 
@@ -157,7 +157,7 @@ bot.once("spawn", async () => {
         for (let i = 0; i < source.target_items.length && (bot.inventory.items().length + i) < (4 * 9); i++) {
             const slot = source.target_items[i];
 
-            if(slot.type !== source.target_items[0].type) continue;
+            if (slot.type !== source.target_items[0].type) continue;
 
             await source.container.withdraw(slot.type, null, slot.count);
 
@@ -167,11 +167,19 @@ bot.once("spawn", async () => {
         source.container.close();
 
         while (true && bot.inventory.items().length > 0) {
-            const target = await openStoreChest(bot, STORE_CHESTS.get(source.target_items[0].name));
+            const target = await openStoreChest(bot, STORE_CHESTS.get(source.target_items[0].name), source.target_items[0]);
 
             // Everything is full
             if (!target) {
                 skip_items.push(source.target_items[0].name);
+
+                const floor_chest = findFloorBlock(bot, chest);
+
+                if (floor_chest !== null && Math.abs(floor_chest.position.y - bot.entity.position.y) > 1.5) {
+                    try {
+                        await bot.pathfinder.goto(new goals.GoalNear(floor_chest.position.x, floor_chest.position.y, floor_chest.position.z, 1.5));
+                    } catch { }
+                }
 
                 await bot.pathfinder.goto(new goals.GoalNear(source.chest_used.position.x, source.chest_used.position.y, source.chest_used.position.z, MAX_RANGE_CHEST));
                 await bot.lookAt(source.chest_used.position);
@@ -181,7 +189,7 @@ bot.once("spawn", async () => {
                 for (let i = 0; i < source.target_items.length && (bot.inventory.items().length - i) > 0; i++) {
                     const slot = source.target_items[i];
 
-                    if(slot.type !== source.target_items[0].type) continue;
+                    if (slot.type !== source.target_items[0].type) continue;
 
                     await container.deposit(slot.type, null, slot.count);
 
@@ -193,10 +201,13 @@ bot.once("spawn", async () => {
                 break;
             }
 
+            // console.log("A")
+            // console.log(getOnlyChestSlots(target.container));
+            // target.container.fillSlotWithItem(getOnlyChestSlots(target.container).filter((slot) => slot !== null && slot.count < 64)[0], source.target_items[0]);
             for (let i = 0; i < source.target_items.length && (bot.inventory.items().length - i) > 0 && target.container.containerItems().length < eval(target.container.type.split("_")[1].replace("x", "*")); i++) {
                 const slot = source.target_items[i];
 
-                if(slot.type !== source.target_items[0].type) continue;
+                if (slot.type !== source.target_items[0].type) continue;
 
                 await target.container.deposit(slot.type, null, slot.count);
 
@@ -204,6 +215,7 @@ bot.once("spawn", async () => {
             }
 
             target.container.close();
+            break;
         }
 
         console.log("Finish", source.target_items[0].name);
