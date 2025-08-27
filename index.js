@@ -1,3 +1,5 @@
+import fs from "fs";
+
 import mineflayer from "mineflayer";
 import prismarine_block from "prismarine-block";
 import minecraft_data from "minecraft-data";
@@ -10,6 +12,20 @@ import sleep from "./sleep.js";;
 
 import { findBlock, MAX_POS, MIN_POS } from "./area.js";
 import { findChests, findFloorBlock, getOnlyChestSlots, MAX_RANGE_CHEST, openStoreChest, openUsefulDropChest } from "./chests.js";
+
+if(process.platform == "win32") {
+    if(fs.existsSync(".env")) {
+        const data = fs.readFileSync(".env").toString().replace(/\r/g, '').split('\n');
+
+        const str = "USERNAME=";
+
+        const user = data.find((v) => v.includes(str));
+
+        if(user) {
+            process.env.USERNAME = user.replace(str, '');
+        }
+    }
+}
 
 const bot = mineflayer.createBot({
     host: process.env.SERVER_IP,
