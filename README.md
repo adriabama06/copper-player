@@ -79,3 +79,6 @@ Contributions are welcome! Please open an issue or submit a pull request.
 ## Support
 
 For questions or issues, please open an issue in the repository.
+
+## Thanks
+Thanks to [mineflayer](https://github.com/PrismarineJS/mineflayer) for their amazing work.
