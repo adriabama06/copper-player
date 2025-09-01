@@ -51,11 +51,11 @@ function findNearestChest(itemframe, chests) {
     position = new Vec3(itemframe.position.x - 0.1, itemframe.position.y - 0.1, itemframe.position.z - 0.1).round();
 
     let best_chest = chests[0];
-    let best_distance = itemframe.position.distanceTo(best_chest.position);
+    let best_distance = position.distanceTo(best_chest.position);
 
     for (let i = 1; i < chests.length; i++) {
         const chest = chests[i];
-        const distance = itemframe.position.distanceTo(chest.position);
+        const distance = position.distanceTo(chest.position);
 
         if (distance > best_distance) continue;
 
@@ -119,7 +119,7 @@ function findItemFrames(bot, min, max) {
  */
 export function findChests(bot, min, max) {
     const drop_chests = findBlocks(bot, min, max,
-        (block) => block.name === "trapped_chest" && block._properties && typeof block._properties.type === "string"
+        (block) => (block.name === "trapped_chest" || block.name.includes("copper_chest")) && block._properties && typeof block._properties.type === "string"
             && (block._properties.type === "single" || block._properties.type === "right")
     );
 
